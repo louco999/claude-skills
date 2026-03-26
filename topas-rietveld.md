@@ -1,356 +1,354 @@
 # TOPAS Rietveld Refinement Skill
+# TOPAS 里特沃尔德精修技能
 
-## Trigger
-Use this skill whenever the user provides XRD data files (.xy, .xdd, .raw, .dat, .xye) and/or CIF structure files and asks for Rietveld refinement, Pawley refinement, phase analysis, quantitative analysis, or any crystallographic fitting using TOPAS. Also trigger when the user mentions "精修", "Rietveld", "TOPAS", "XRD fitting", or asks to refine lattice parameters / atomic positions.
+## Trigger / 触发条件
+
+**Use this skill when the user:**
+- Provides XRD data files (`.xy`, `.xdd`, `.raw`, `.dat`, `.xye`) and/or CIF structure files
+- Asks for Rietveld refinement, Pawley refinement, phase analysis, or quantitative phase analysis
+- Mentions keywords: **"精修"**, **"Rietveld"**, **"TOPAS"**, **"XRD fitting"**, **"拟合"**
+- Wants to refine lattice parameters, atomic positions, thermal parameters, or microstructure
+
+**当用户：**
+- 提供 XRD 数据文件和/或 CIF 结构文件
+- 要求 Rietveld 精修、Pawley 精修、物相分析、定量分析
+- 提到"精修"、"拟合"、"Rietveld"、"TOPAS"等关键词
 
 ---
 
-## TOPAS Software Location
-- GUI: `C:\topas\ta.exe`
-- CLI engine: `C:\topas\tc.exe` — runs `.inp` files: `C:/topas/tc.exe myfile.inp`
-- Examples: `C:\topas\test_examples\`
-- Output fit data: use `Out_Yobs_Ycalc_and_Difference(filename.txt)` keyword in INP
-- Plot with Python: `C:/Users/hanyi/gsas2main/python.exe`
+## Software Location / 软件位置
+
+| Item | Path |
+|------|------|
+| TOPAS GUI | `C:\topas\ta.exe` |
+| TOPAS CLI engine | `C:\topas\tc.exe` |
+| Run refinement | `C:/topas/tc.exe filename.inp` (no extension needed) |
+| Examples | `C:\topas\test_examples\` |
+| Python (with numpy/matplotlib) | `C:\Users\hanyi\miniforge3\python.exe` |
+
+> **Output files:** `filename.out` (log + refined params), fit data via `Out_Yobs_Ycalc_and_Difference("fit.txt")`
 
 ---
 
-## INP File Structure (complete template)
+## Complete INP Template / 完整 INP 模板
 
 ```
-/* Comment block */
-r_wp  0          ' will be filled after refinement
-do_errors        ' compute ESDs
+/* Comment / 注释 */
+r_wp  0          ' will be updated after refinement
+do_errors        ' calculate ESDs (误差标准偏差)
 
-xdd "datafile.xy"           ' or RAW(), DAT(), XDD() — matches file extension
-  lam                        ' wavelength block (use instead of CuKa2 for custom)
-    ymin_on_ymax 0.001
-    la 0.5791 lo 1.540596 lh 0.437    ' Cu Ka1
-    la 0.3209 lo 1.544490 lh 0.52     ' Cu Ka2
-  ' OR use macros:
-  ' CuKa2(0.001)    — Cu Ka1+Ka2 simple
-  ' CuKa5(0.0001)   — Cu Ka with 5 lines (most accurate)
+xdd "datafile.xy"                    ' or: RAW() DAT() XDD()
+  x_calculation_step = Yobs_dx_at(Xo);  convolution_step 4
+  start_X  10                        ' starting 2theta
+  finish_X 80                        ' ending 2theta
 
-  Radius(173)              ' goniometer radius in mm (173 or 200.5 typical)
-  LP_Factor(17)            ' Lorentz-polarization: 17=no mono, 26.4=graphite mono, 27=Ge mono
-  Full_Axial_Model(12, 20, 12, 5.1, @ 8)  ' axial divergence: L_S, L_D, Rs, 2xh_D, 2xh_S
-  ' OR: Simple_Axial_Model(@, 12)
-  Divergence(1)            ' divergence slit in degrees (0.5, 1, 2 typical)
-  Slit_Width(0.1)          ' receiving slit width in mm
+  ' --- Wavelength / 波长 ---
+  lam ymin_on_ymax 0.0001
+    la 1.0  lo 1.540596  lh 0.437   ' custom: weight, lambda, linewidth
+  ' Shortcuts: CuKa2(0.001)  CuKa5(0.0001)  CoKa3(0.0001)  MoKa2(0.001)
+  ' Synchrotron: la 1.0  lo 0.69  lh 0.01
 
-  bkg @ 0 0 0 0 0 0        ' Chebyshev polynomial background (add more terms if needed)
-  One_on_X(@, 1000)        ' 1/X background for low-angle air scatter
-  Zero_Error(@, 0)         ' zero-point error in 2theta (degrees); also: ZE(@, 0)
-  ' Absorption(@, 50)       ' flat plate absorption correction
+  ' --- Instrument / 仪器参数 ---
+  LP_Factor(17)             ' 0=synchrotron, 17=no mono, 26.4=graphite, 27=Ge
+  Full_Axial_Model(12, 20, 12, 5.1, @ 8)  ' axial divergence (lab diffractometer)
+  ' Simple_Axial_Model(@, 10)              ' simpler alternative
+  Divergence(1)             ' divergence slit in degrees
+  Slit_Width(0.1)           ' receiving slit in mm
+  Radius(173)               ' goniometer radius in mm (173 or 200.5)
+  ' For synchrotron: LP_Factor(90), Simple_Axial_Model with small value
 
-  str                      ' structure block (one per phase)
-    space_group  Ia-3      ' use TOPAS notation: F_M_3_M, R_-3_c, P_21/C etc.
-    ' OR: STR(space_group_name, "phase_name")
+  ' --- Background / 背景 ---
+  bkg @ 0 0 0 0 0 0 0 0 0  ' Chebyshev polynomial (add more terms if needed)
+  One_on_X(@, 1000)         ' 1/X term for low-angle air scatter
+  Zero_Error(@, 0)          ' zero-point error in 2theta; also: ZE(@, 0)
+  ' Absorption(@, 50)       ' flat-plate absorption correction
 
-    phase_name "My Phase"
-    scale @ 0.001          ' scale factor — always refine (@)
+  ' --- Structure Block / 结构块 ---
+  str
+    space_group  "F M -3 M"   ' TOPAS accepts standard HM notation with spaces
+    ' Common: "R 3"  "P 21/c"  "C 2/c"  "I 41/a m d"  "R -3 c"
 
-    ' Lattice — use appropriate macro:
+    ' Lattice / 晶格参数
     Cubic(@ 5.41)
     ' Tetragonal(@ 3.80, @ 9.51)
-    ' Hexagonal(@ 4.91, @ 5.41)
+    ' Hexagonal(@ 4.91, @ 5.41)   ' also for trigonal hexagonal setting
     ' Orthorhombic(@ 5.00, @ 7.00, @ 9.00)
-    ' Monoclinic(@ 6.00, @ 8.00, @ 5.00, @ 110.0)   — b-unique, beta
-    ' Trigonal(@ 5.00, @ 13.00)
-    ' Triclinic: a @ b @ c @ al @ be @ ga @
-    ' Manual: a @ 5.00  b @ 7.00  c @ 9.00
+    ' Monoclinic(@ 6.00, @ 8.00, @ 5.00, @ 110.0)
+    ' Triclinic:  a @ 5  b @ 7  c @ 9  al @ 90  be @ 100  ga @ 90
+    ' Manual a=b constraint (e.g. R3):  a hex_a 5.19  b hex_a 5.19  c @ 13.8
 
-    ' Atomic sites
-    site  Ce1  x 0   y 0   z 0       occ Ce+4  1  beq @ 0.5
-    site  O1   x 0.25 y 0.25 z 0.25  occ O-2   1  beq @ 0.5
-    ' beq = isotropic B factor; beq @ 1 is a good starting value
-    ' For fixed coordinates use value without @
-    ' For symmetry constraints use: x = 1/3;  y = 2/3;  z @ 0.25
+    ' Atomic sites / 原子坐标
+    site  Ce1  x 0     y 0     z 0      occ Ce+4  1  beq @ 0.5
+    site  O1   x 0.25  y 0.25  z 0.25   occ O-2   1  beq @ 0.5
+    ' Fixed coord:        x 0  (no @)
+    ' Symmetry constraint: x = 1/3;  y = 2/3;  z @ 0.25
+    ' Shared Beq:         prm bCo 1.0  min 0.01 max 5  then  beq = bCo;
 
-    ' Microstructure (peak broadening)
-    CS_L(@, 100)         ' Lorentzian crystallite size (nm) — most common
-    ' CS_G(@, 100)       ' Gaussian crystallite size
-    ' CS(@, 100)         ' combined = CS_L + CS_G in quadrature
-    Strain_L(@, 0.01)    ' Lorentzian microstrain
-    ' Strain_G(@, 0.01)  ' Gaussian microstrain
+    ' Peak shape / 峰形
+    PV_Peak_Type(pku,0.02, pkv,0.02, pkw,0.02, !pkx,0.00, pky,0.18, !pkz,0.00)
+    ' CS_L(@, 100)      ' Lorentzian crystallite size (nm)
+    ' Strain_L(@, 0.01) ' Lorentzian microstrain
 
-    ' Optional
-    MVW(0, 0, 0)                        ' molecular volume weight (for density calc)
-    r_bragg 0                           ' phase R-Bragg factor
-    PO(@, 1, , 0 0 1)                   ' March-Dollase preferred orientation [hkl]
-    ' PO_Spherical_Harmonics(sh, 8)     ' spherical harmonics PO (more flexible)
-    append_bond_lengths                 ' output bond lengths
-    Out_CIF_STR(output.cif)            ' output refined CIF
+    scale @ 0.001         ' always refine
+    r_bragg 0
+    MVW(0, 0, 0)          ' mass/volume/weight% output
+    append_bond_lengths
+    Out_CIF_STR("refined.cif")
 
-  ' Output
-  Out_Yobs_Ycalc_and_Difference(fit.txt)
+Out_Yobs_Ycalc_and_Difference("fit.txt")
 ```
 
 ---
 
-## Space Group Name Syntax (TOPAS)
-Spaces replaced by underscores, special chars:
-- `-` → `-` (keep minus for inversion)
-- `/` → `/` or `_`
-- Examples:
-  - `Fm-3m` → `F_M_-3_M` or `F_M_3_M`
-  - `R-3c` → `R_-3_c` or `R_-3_C`
-  - `P21/c` → `P_21/C` or `P_1_21/C_1`
-  - `C2/c` → `C_2/C` or `C_1_2/C_1`
-  - `Pnma` → `P_N_M_A`
-  - `P63/mmc` → `P_63/M_M_C`
-  - `I41/amd` → `I_41/A_M_D` or `I_41/A_M_D:2`
+## LP_Factor Guide / LP 因子说明
+
+| Source / 来源 | Value | Notes |
+|--------|-------|-------|
+| Synchrotron 同步辐射 | `90` | Horizontally polarized beam 水平极化 |
+| No monochromator 无单色器 | `17` | Typical Bragg-Brentano lab 实验室最常见 |
+| Graphite monochromator 石墨单色器 | `26.4` | Common lab setup |
+| Ge monochromator Ge 单色器 | `27` | High-resolution lab |
 
 ---
 
-## Wavelength Macros
-```
-CuKa1(0.001)    ' Cu Ka1 only, lh=linewidth
-CuKa2(0.001)    ' Cu Ka1 + Ka2 (2 lines)
-CuKa5(0.0001)   ' Cu Ka with 5 components (most accurate for lab data)
-CoKa3(0.0001)   ' Co radiation
-MoKa2(0.001)    ' Mo radiation
-```
+## Space Group Notation / 空间群写法
 
-LP_Factor values:
-- `0` = synchrotron / no polarization
-- `17` = no monochromator (typical Bragg-Brentano)
-- `26.4` = graphite monochromator
-- `27` = Ge monochromator
+TOPAS 推荐使用标准 Hermann-Mauguin 符号（带空格）：
+
+| Standard | TOPAS Input | Example phase |
+|----------|-------------|---------------|
+| Fm-3m | `"F M -3 M"` | CeO2, NaCl |
+| R-3c | `"R -3 c"` | Al2O3 (corundum) |
+| P21/c | `"P 21/c"` | monoclinic, most common |
+| C2/c | `"C 2/c"` | monoclinic |
+| Pnma | `"P n m a"` | orthorhombic |
+| P63/mmc | `"P 63/m m c"` | hexagonal |
+| R3 | `"R 3"` | Co3TeO6 (HP) |
+| I41/amd | `"I 41/a m d"` | TiO2 anatase |
+
+Also accepted (underscore style 下划线写法): `F_M_-3_M`, `R_-3_c`, `P_21/C`
 
 ---
 
-## Rietveld Refinement Strategy (Multi-Round)
+## Multi-Round Refinement Strategy / 多轮精修策略
 
-### Round 1 — Scale only
+> 这是从 TOPAS 官方 examples 学习总结的**推荐精修流程**。
+
+### Round 1 — Scale Only / 第一轮：仅比例因子
 ```
 scale @ 0.001
-' All other structure params fixed (no @)
-' No atomic positions refined
-CS_L(!csl, 100)   ' ! = fixed but named
+' All other params fixed: use ! prefix
 ```
-**Goal:** Rwp drops significantly. If not, check space group or data range.
+✅ **Goal:** Rwp drops significantly.
+❌ If Rwp barely changes → wrong space group or completely wrong structure.
 
-### Round 2 — Lattice parameters
-```
-Cubic(@ 5.41)    ' add @ to refine
-scale @ 0.001
-CS_L(!csl, 100)
-```
-**Goal:** Peak positions align. Rwp improves.
+---
 
-### Round 3 — Background + Zero error
+### Round 2 — Lattice + Background + Zero Error / 第二轮：格子+背景+零点
 ```
+Cubic(@ 5.41)       ' open lattice with @
 bkg @ 0 0 0 0 0
-Zero_Error(@, 0)
-One_on_X(@, 1000)   ' if low-angle scatter present
+Zero_Error(ze, 0)
+scale @ 0.001
 ```
-
-### Round 4 — Peak shape (microstructure)
-```
-CS_L(@, 100)       ' refine crystallite size
-Strain_L(@, 0.01)  ' refine microstrain (if peaks are asymmetric)
-```
-**Note:** Only refine CS_L OR Strain_L first, then both. Don't refine CS_G and CS_L simultaneously at first.
-
-### Round 5 — Atomic positions (x, y, z)
-Add `@` to fractional coordinates. Fix special-position coordinates (those constrained by symmetry).
-```
-site Fe  x @ 0.14  y 0.25  z @ -0.04   occ Fe 1 beq @ 0.5
-```
-
-### Round 6 — Thermal parameters (Beq)
-```
-site Fe  x @ 0.14  y 0.25  z @ -0.04   occ Fe 1 beq @ 0.5
-```
-Start all beq at 0.5–1.0. Constrain to reasonable range: `beq @ 0.5 min 0.01 max 5`
-
-### Round 7 — Occupancy (if needed)
-Only refine if physical reason (vacancies, mixed occupancy):
-```
-occ Fe+3 @ 0.9
-```
-
-### Round 8 — Preferred orientation (if needed)
-```
-PO(@, 1, , 0 0 1)              ' March-Dollase along [001]
-' OR
-PO_Spherical_Harmonics(sh, 6)  ' more flexible, use order 4–8
-```
-
-### Round 9 — Full refinement
-All parameters on simultaneously. Use `do_errors` to get ESDs.
+✅ **Goal:** Peak positions align. Rwp improves 10–30%.
 
 ---
 
-## Reading CIF Files
-Extract from CIF manually:
-1. `_symmetry_space_group_name_H-M` or `_space_group_name_H-M_alt` → space group
-2. `_cell_length_a/b/c`, `_cell_angle_alpha/beta/gamma` → lattice
-3. `_atom_site_label`, `_atom_site_fract_x/y/z`, `_atom_site_occupancy`, `_atom_site_B_iso_or_equiv` → sites
+### Round 3 — Peak Shape / 第三轮：峰形（最关键一步）
+```
+PV_Peak_Type(pku,0.02, pkv,0.02, pkw,0.02, !pkx,0.00, pky,0.18, !pkz,0.00)
+Simple_Axial_Model(axial, 10.0)   ' for lab diffractometer
+' LP_Factor(90) + Simple_Axial_Model for synchrotron
+```
+✅ **Goal:** Peak widths match. Often the **largest Rwp improvement**.
+⚠️ If Rwp still > 30% after lattice + peak shape → **wrong starting atomic coordinates!**
 
 ---
 
-## Quality Indicators
-| Indicator | Excellent | Good | Acceptable | Poor |
+### Round 4 — Atomic Positions / 第四轮：原子坐标
+```
+site Fe  x @ 0.14  y 0.25  z @ -0.04   occ Fe 1  beq !b 1.0
+```
+- Fix special-position coordinates (constrained by symmetry)
+- **Keep beq fixed** at this stage to avoid correlation
+- Open x, y, z one site at a time if unstable
+
+---
+
+### Round 5 — Thermal Parameters / 第五轮：热参数
+```
+prm bCo 1.0  min 0.01 max 5
+prm bO  1.0  min 0.01 max 5
+site Co1  x 0  y 0  z @ 0.37  occ Co 1  beq = bCo;
+site O1   x @ 0.25  y @ 0.01  z @ 0.25  occ O 1  beq = bO;
+```
+- Constrain same-element beq (减少参数相关性)
+- If beq hits min limit → correlation with position; fix beq or widen range
+
+---
+
+### Round 6 — Full Refinement + ESDs / 第六轮：全精修+误差
+```
+do_errors
+chi2_convergence_criteria 0.0001
+append_bond_lengths
+Out_CIF_STR("final.cif")
+```
+
+---
+
+## Quality Indicators / 精修质量指标
+
+| Indicator 指标 | Excellent 优秀 | Good 好 | Acceptable 可接受 | Poor 差 |
 |-----------|-----------|------|------------|------|
-| Rwp | <5% | 5–8% | 8–12% | >15% |
-| GOF (χ²) | ~1.0 | 1–2 | 2–4 | >5 |
-| R-Bragg | <2% | 2–4% | 4–8% | >10% |
-| Rwp/Rexp | ~1.0 | 1–2 | 2–3 | >3 |
+| **R_wp** | < 5% | 5–8% | 8–12% | > 15% |
+| **GOF (χ²)** | ~1.0 | 1–2 | 2–4 | > 5 |
+| **R-Bragg** | < 2% | 2–4% | 4–8% | > 10% |
+
+> 💡 **GOF < 1** → over-parameterized (过拟合).
+> 💡 **GOF > 3** → model needs improvement or data has systematic errors.
+> 💡 **R-Bragg** reflects structure quality independent of background.
 
 ---
 
-## Common Problems and Fixes
+## Common Problems & Fixes / 常见问题与解决方法
 
-| Problem | Symptom | Fix |
-|---------|---------|-----|
-| Wrong space group | Systematic missing peaks | Check CIF, try related SG |
-| Wrong lattice | All peaks shifted | Refine cell params first |
-| Background too high | Broad humps not fit | Add more bkg terms, or One_on_X |
-| Peak too broad/narrow | Systematic width mismatch | Adjust CS_L, Strain_L |
-| Preferred orientation | Intensity mismatch for specific planes | Add PO or PO_Spherical_Harmonics |
-| Rwp stuck > 15% | No improvement | Check data range, exclude bad regions |
-| beq goes negative | Unstable refinement | Fix beq, check atom position |
-| Scale factor → 0 | Phase absent | Check if phase exists in data |
-| Diverging parameters | Over-parameterized | Fix some params, reduce correlation |
-
----
-
-## Useful Keywords
-```
-Exclude { 20 25 }          ' exclude 2theta range (e.g., sample holder peak)
-start_X 10                 ' start data at 10 degrees
-finish_X 80               ' end data at 80 degrees
-rebin_with_dx_of 0.02      ' rebin noisy data
-convolution_step 2         ' faster calculation for broad peaks
-num_runs 5                 ' run refinement N times
-continue_after_convergence ' keep running after convergence
-iters 100                  ' max iterations
-process_times              ' print timing info
-verbose -1                 ' suppress output (for batch)
-only_penalties             ' minimize penalties only (no diffraction data)
-bootstrap_errors 100       ' bootstrap error estimation
-```
+| Problem 问题 | Symptom 症状 | Fix 解决方案 |
+|-------------|-------------|------------|
+| Wrong space group 空间群错误 | Systematic absent/extra peaks | Check CIF, try related SG |
+| Wrong starting positions 坐标起点错 | Rwp stuck >30% even peaks aligned | Use published coords at similar P/T |
+| Background too high 背景过高 | Broad humps not fit | Add more bkg terms; `One_on_X` |
+| Peak widths wrong 峰宽不符 | Systematic shape mismatch | Refine PV_Peak_Type or CS_L/Strain |
+| Preferred orientation 择优取向 | Specific reflection intensities wrong | `PO(@,1,,0 0 1)` or `PO_Spherical_Harmonics(sh,6)` |
+| beq hits minimum 热参数到极限 | beq → 0 or negative | Fix beq; check site symmetry |
+| Scale → 0 比例因子为零 | Phase absent from data | Verify phase; check 2theta range |
+| Atomic position unstable 坐标不稳 | Large jumps in x/y/z | Add `min`/`max`; check multiplicity |
 
 ---
 
-## Multi-Phase Refinement
+## Useful Keywords / 常用关键词参考
+
 ```
-xdd "data.xy"
-  CuKa5(0.0001)
-  ...instrument params...
-  bkg @ 0 0 0 0 0
+' Data range / 数据范围
+start_X 10        finish_X 80
+Exclude { 30 40 }                   ' exclude region 排除区间
+rebin_with_dx_of 0.02               ' rebin noisy data 合并数据点
 
-  str
-    phase_name "Phase 1"
-    space_group Fm-3m
-    Cubic(@ 5.41)
-    ...
-    scale @ 0.001
-    MVW(0, 0, 0)
-    weight_percent 0    ' auto-calculated
+' Convergence / 收敛控制
+iters 100000
+chi2_convergence_criteria 0.001
+continue_after_convergence
+num_runs 3                          ' repeat N times 重复N次
 
-  str
-    phase_name "Phase 2"
-    space_group Pnma
-    Orthorhombic(@ 5.0, @ 7.0, @ 9.0)
-    ...
-    scale @ 0.0005
-    MVW(0, 0, 0)
-    weight_percent 0
-```
-Weight % is automatically calculated when `MVW` and `scale` are present.
+' Output / 输出
+MVW(0, 0, 0)
+append_bond_lengths
+Out_CIF_STR("out.cif")
+Create_hklm_d_Th2_Ip_file("peaks.hkl")
+Out_Yobs_Ycalc_and_Difference("fit.txt")
 
----
-
-## Pawley Refinement (for indexing / unit cell check)
-```
-xdd "data.xy"
-  ...instrument params...
-  bkg @ 0 0 0 0 0
-
-  hkl_Is
-    space_group P21/c
-    a @ 10.0  b @ 8.0  c @ 6.0  be @ 100.0
-    CS_L(@, 200)
-    default_I_attributes 1 val_on_continue = Rand(0,5);
+' Advanced / 高级
+do_errors                           ' ESD calculation 计算误差
+bootstrap_errors 100                ' bootstrap error 自举误差
+convolution_step 4                  ' faster for broad peaks
+x_calculation_step = Yobs_dx_at(Xo);  ' adaptive step 自适应步长
+process_times                       ' print timing 输出计算时间
 ```
 
 ---
 
-## Outputting Results
-```
-Out_Yobs_Ycalc_and_Difference(fit.txt)   ' 3-column: Yobs Ycalc Diff
-Out_CIF_STR(refined.cif)                  ' refined structure as CIF
-Out_CIF_Bonds_Angles(refined.cif)         ' bond lengths/angles
-Create_hklm_d_Th2_Ip_file(peaks.hkl)     ' peak list
-append_bond_lengths                        ' to console output
+## Synchrotron Data Tips / 同步辐射数据要点
 
-' Custom output:
-out results.txt
-  Out(a, "a = %.6f Angstrom\n")
-  Out(r_wp, "Rwp = %.4f %%\n")
 ```
+lam ymin_on_ymax 0.0001 la 1.0 lo 0.69 lh 0.01  ' monochromatic
+LP_Factor(90)          ' fully polarized beam 全极化束
+Simple_Axial_Model(axial, 2.0)   ' small value; or omit
+x_calculation_step = Yobs_dx_at(Xo);  convolution_step 4
+```
+
+| Feature | Lab XRD | Synchrotron |
+|---------|---------|------------|
+| Wavelength | Cu Kα (1.54 Å) | Tunable (e.g. 0.69 Å) |
+| LP_Factor | 17 / 26.4 / 27 | **90** |
+| Peak width | PV + axial model | PV only (narrow) |
+| Background | Often significant | Near zero (normalized data) |
+| Scale factor | ~0.001 | ~1e-9 (if normalized) |
 
 ---
 
-## Running TOPAS from Command Line
-```bash
-# Single file
-C:/topas/tc.exe myfile.inp
+## Quantitative Phase Analysis / 定量物相分析
 
-# Check output: myfile.out (log), fit.txt (Yobs/Ycalc/Diff)
-
-# Multi-run for better convergence
-# Add to inp: num_runs 3
 ```
+str
+  phase_name "Quartz"
+  Hexagonal(@ 4.913, @ 5.405)
+  space_group "P 31 2 1"
+  ...
+  scale @ 0.001
+  MVW(0, 0, 0)
+  weight_percent 0    ' auto-calculated 自动计算
+
+str
+  phase_name "Corundum"
+  Hexagonal(@ 4.758, @ 12.99)
+  space_group "R -3 c"
+  ...
+  scale @ 0.001
+  MVW(0, 0, 0)
+  weight_percent 0
+```
+> Weight% = automatically calculated when `MVW` and `scale @` are both present.
 
 ---
 
-## Plotting Fit Results (Python)
+## Plotting with Python / Python 出图
+
 ```python
-import numpy as np
-import matplotlib
+# Python: C:\Users\hanyi\miniforge3\python.exe
+import numpy as np, matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-# fit.txt has 3 columns: Yobs Ycalc Diff
-data = np.loadtxt('fit.txt')
+data = np.loadtxt(r'path\to\fit.txt')   # 3 cols: Yobs  Ycalc  Diff
 yobs, ycalc, diff = data[:,0], data[:,1], data[:,2]
-
-# Generate 2theta axis from start_X, step, n_points
-# e.g., start=10, step=0.01, n=7001 → linspace(10, 80, 7001)
 tth = np.linspace(start_X, finish_X, len(yobs))
 
 fig, axes = plt.subplots(2, 1, figsize=(14, 8), dpi=150,
-                         gridspec_kw={'height_ratios': [3, 1], 'hspace': 0.06})
+                         gridspec_kw={'height_ratios': [3, 1], 'hspace': 0.05})
 ax = axes[0]
-ax.plot(tth, yobs,  color='#1565C0', lw=0.7, alpha=0.85, label='Observed')
-ax.plot(tth, ycalc, color='#C62828', lw=1.0, alpha=0.9,  label='Calculated')
-ax.legend(); ax.set_ylabel('Intensity'); ax.tick_params(labelbottom=False)
+ax.plot(tth, yobs,  color='#1565C0', lw=0.8, label='Observed')
+ax.plot(tth, ycalc, color='#C62828', lw=1.0, label='Calculated')
+ax.set_ylabel('Intensity'); ax.set_xlim(start_X, finish_X)
+ax.legend(); ax.tick_params(labelbottom=False)
+ax.set_title(f'Rietveld Fit  Rwp = {rwp:.2f}%')
 
 ax2 = axes[1]
-ax2.plot(tth, diff, color='#2E7D32', lw=0.7, label='Difference')
+ax2.plot(tth, diff, color='#2E7D32', lw=0.7)
 ax2.axhline(0, color='gray', lw=0.5, ls='--')
 ax2.set_xlabel('2θ (degree)'); ax2.set_ylabel('Difference')
+ax2.set_xlim(start_X, finish_X)
 
-plt.savefig('fit.png', dpi=180, bbox_inches='tight')
+plt.tight_layout()
+plt.savefig(r'path\to\fit.png', dpi=180, bbox_inches='tight')
 ```
-Use Python at: `C:/Users/hanyi/gsas2main/python.exe`
 
 ---
 
-## Workflow for User-Provided CIF + XY Data
+## Full Workflow Summary / 完整精修流程总结
 
-1. **Parse CIF** → extract space group, a/b/c/angles, atom sites (x,y,z,occ,beq)
-2. **Read XY** → determine 2theta range, step size, radiation source
-3. **Build INP** → use template above, set start_X/finish_X from data
-4. **Round 1** → scale only (tc.exe run)
-5. **Round 2** → + lattice
-6. **Round 3** → + background, zero error
-7. **Round 4** → + peak shape
-8. **Round 5** → + atomic positions
-9. **Round 6** → + beq, full do_errors
-10. **Parse output** → read r_wp, GOF, refined params from .out file
-11. **Plot** → generate fit.png with Python
-12. **Report** → summarize Rwp, GOF, lattice params, notable features
+| Step 步骤 | Action 操作 | Expected Rwp 预期 Rwp |
+|-----------|------------|----------------------|
+| 0. Prepare | Parse CIF + read XY range | — |
+| 1. Scale | `scale @` only | 50–90% |
+| 2. Lattice | + `a/b/c @` + `bkg @` + `ZE` | 30–60% |
+| 3. Peak shape | + `PV_Peak_Type` or `CS_L` | **10–25%** ← biggest drop |
+| 4. Positions | + `x/y/z @`, beq fixed | 8–20% |
+| 5. Beq | + thermal params | 5–15% |
+| 6. Final | `do_errors` + bond lengths + CIF out | **< 10% target** |
+
+> ⚠️ **Critical insight / 关键经验：**
+> If Rwp is stuck **above 30%** even after lattice + peak shape → starting atomic coordinates are wrong.
+> 如果精修到格子和峰形之后 Rwp 仍然 >30%，说明原子坐标起点有问题。
+> **Solution:** Use coordinates from a published structure at similar conditions (P, T).
+> **解决：** 使用相近压力/温度条件下已发表的结构坐标作为起点。
